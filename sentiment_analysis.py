@@ -7,7 +7,9 @@ from tensorflow.keras.layers import Embedding, SimpleRNN, Dense
 from sklearn.model_selection import train_test_split
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
-
+import nltk
+nltk.download('stopwords')
+nltk.download('punkt')
 # Read the reviews, extract unique id, text, and rating
 def read_reviews(directory):
     reviews = []
@@ -28,23 +30,23 @@ def read_reviews(directory):
                 labels.append(1 if label == 'pos' else 0)
     return reviews, labels
 
-train_reviews, train_labels = read_reviews('aclImdb_v1/aclImdb/train')
-test_reviews, test_labels = read_reviews('aclImdb_v1/aclImdb/test')
+train_reviews, train_labels = read_reviews('aclImdb/train')
+test_reviews, test_labels = read_reviews('aclImdb/test')
 
-# Function to load GloVe embeddings
+# Function to load GloVe embeddings using emmbed_dict
 def load_glove_embeddings(embeddings_file):
     embeddings_index = {}
     with open(embeddings_file, encoding='utf-8') as f:
         for line in f:
             values = line.split()
             word = values[0]
-            coefs = np.asarray(values[1:], dtype='float32')
-            embeddings_index[word] = coefs
+            vector = np.asarray(values[1:], dtype='float32')
+            embeddings_index[word] = vector
 
     return embeddings_index
 
-# Load GloVe embeddings
-glove_file = 'glove.6B/glove.6B.100d.txt'
+# Load GloVe embeddings using emmbed_dict
+glove_file = 'glove.840B.300d.txt'
 glove_embeddings = load_glove_embeddings(glove_file)
 
 # Build vocabulary using GloVe embeddings
@@ -53,7 +55,7 @@ index = 1
 for word in glove_embeddings.keys():
     word_to_index[word] = index
     index += 1
-
+    
 # Tokenize and pad sequences
 max_sequence_length = 200
 vocab_size = len(word_to_index) + 1
@@ -65,27 +67,29 @@ test_data = pad_sequences(test_sequences, maxlen=max_sequence_length)
 # Split data into training and validation sets
 X_train, X_valid, y_train, y_valid = train_test_split(train_data, train_labels, test_size=0.2, random_state=42)
 
-# Build and compile the RNN model
-def build_rnn_model(units=128, learning_rate=1e-3):
-    model = tf.keras.Sequential()
-    model.add(Embedding(input_dim=vocab_size, output_dim=100, input_length=max_sequence_length, trainable=False))
-    model.add(SimpleRNN(units=units, activation='relu'))
-    model.add(Dense(units=1, activation='sigmoid'))
+# Create the model with GloVe embeddings
+embedding_dim = 100  # Assuming you are using the 100-dimensional GloVe embeddings
 
-    model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate),
-                  loss='binary_crossentropy',
-                  metrics=['accuracy'])
+model = tf.keras.Sequential([
+    Embedding(input_dim=vocab_size, output_dim=embedding_dim, input_length=max_sequence_length, trainable=False,
+              weights=[np.array([glove_embeddings.get(word, np.zeros(embedding_dim)) for word in word_to_index.keys()])]),
+    SimpleRNN(units=64),
+    Dense(units=1, activation='sigmoid')
+])
 
-    return model
-X_train = np.array(X_train)
-X_valid = np.array(X_valid)
+# Compile the model
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
 
-# Build and compile the model
-model = build_rnn_model()
-
-# Train the model on the entire training set
-history = model.fit(X_train, y_train, epochs=10, batch_size=32, validation_data=(X_valid, y_valid))
-
-# Evaluate the model on the test set
-test_loss, test_accuracy = model.evaluate(test_data, test_labels)
-print(f"Test Accuracy: {test_accuracy * 100:.2f}%")
+# Print a summary of the dataset
+print("Summary of the IMDb Dataset:")
+print("Number of training samples:", len(X_train))
+print("Number of validation samples:", len(X_valid))
+print("Number of testing samples:", len(test_data))
+print("Vocabulary Size:", vocab_size)
+print("Max Sequence Length:", max_sequence_length)
+print("Embedding Dimension:", embedding_dim)
+print("\nExample of a training sample:")
+print(X_train[0])
+print("Corresponding sentiment label for the example:", y_train[0])
+print("\nModel Summary:")
+model.summary()
