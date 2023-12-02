@@ -33,14 +33,27 @@ def read_reviews(directory):
 train_reviews, train_labels = read_reviews('aclImdb/train')
 test_reviews, test_labels = read_reviews('aclImdb/test')
 
-# Function to load GloVe embeddings using emmbed_dict
 def load_glove_embeddings(embeddings_file):
     embeddings_index = {}
     with open(embeddings_file, encoding='utf-8') as f:
         for line in f:
+            # Skip header line if present
+            if line.startswith(' '):
+                continue
+
+            # Skip empty lines
+            if not line.strip():
+                continue
+
             values = line.split()
             word = values[0]
-            vector = np.asarray(values[1:], dtype='float32')
+
+            # Check if any element in values[1:] is not a valid float
+            try:
+                vector = np.asarray(values[1:], dtype='float32')
+            except ValueError:
+                continue
+
             embeddings_index[word] = vector
 
     return embeddings_index
